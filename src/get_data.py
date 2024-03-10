@@ -49,54 +49,34 @@ def gen_dataset(
         pass
 
     df.to_csv('data.csv', index=False)
-    stamps = []
-
-    @dataclass
-    class Mem_stamps_list:
-        def __init__(self):
-            self.stamps = {}
-            self.count = 0
         
-        def threadable_splus_stamp(self, ra, dec, size, band, res_identifier, filename = None, array_file = None):
-            
-            if
-            
-            if filename in not None and os.path.exists(filename):
+    def threadable_splus_stamp(ra, dec, size, band, filename = None, array_file = None):
+        if filename is not None:
             if os.path.exists(filename):
+                control.debug(f"Stamp for {ra} {dec} already exists.")
                 stamp = fits.open(filename)
             else:
                 stamp = conn.stamp(ra, dec, size, band)
                 stamp.writeto(filename, overwrite=True)
-            
-            self.stamps[res_identifier] = stamp
-            
-            self.count += 1
-            control.info(f"Stamp for {res_identifier} downloaded. {self.count}/{len(df)}")
-    
-    mem_list = Mem_stamps_list()
-    
-    control.info("Downloading stamps")
-    for key, value in df.iterrows():
-        res_id = value["ID"]
-        fits_filename = os.path.join(fits_folder, f"{value['ID']}.fits.fz")
-        control.submit(mem_list.threadable_splus_stamp, value["RA"], value["DEC"], 250, "R", res_id, fits_filename)
-    control.wait()
-    
-    control.info("Saving data if not exists")
-    for key, value in tqdm(df.iterrows()):
-        
-        # value["ID"] is the res_id from the threads
-        stamp = mem_list.stamps[value["ID"]]
-    
-        if arrays_folder:
-            array_file = os.path.join(arrays_folder, f"{value['ID']}.npy")
-            if not os.path.exists(array_file, f"{value['ID']}.npy"):
+                control.debug(f"Stamp for {ra} {dec} downloaded.")
+        else:
+            stamp = conn.stamp(ra, dec, size, band)
+            control.debug(f"Stamp for {ra} {dec} downloaded.")
+        if array_file:
+            if os.path.exists(array_file):
+                control.debug(f"Array for {ra} {dec} already exists.")
+            else:
                 np.save(array_file, stamp[1].data)
         
-        ## Close all stamps
-        stamp.close()
-
-    return df, stamps
+    control.info("Downloading stamps")
+    for key, value in df.iterrows():
+        fits_filename = os.path.join(fits_folder, f"{value['ID']}.fits.fz")
+        array_file = os.path.join(arrays_folder, f"{value['ID']}.npy") if arrays_folder else None
+        control.submit(threadable_splus_stamp, value["RA"], value["DEC"], 250, "R", fits_filename, array_file)
+    control.wait()
+    
+    control.info("Finished generating dataset.")
+    
 
 if __name__ == "__main__":
     gen_dataset()
