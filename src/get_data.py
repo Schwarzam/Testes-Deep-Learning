@@ -11,7 +11,51 @@ import os
 
 from src.log import control
 
-def gen_dataset(
+def get_dataset_fieldimagequery(
+    query : str = """
+            SELECT 
+            TOP 2000
+            det.id, det.ra, det.dec, det.field, det.B, det.A, det.flux_radius_50, det.theta, det.fwhm,
+            
+            r.r_auto
+            FROM "idr4_dual"."idr4_detection_image" AS det 
+            
+            LEFT OUTER JOIN "idr4_dual"."idr4_dual_r" AS r ON r.id = det.id
+            
+            WHERE 1 = CONTAINS( POINT('ICRS', det.ra, det.dec), 
+                    CIRCLE('ICRS', 0.5, 0.4, 1) ) 
+                    AND r.r_auto < 21
+                    AND det.field = 'STRIPE82-0001'
+    """,
+    field_name: str = "STRIPE82-0001",
+    fits_folder : str = "data/",
+    arrays_folder : bool = None
+):  
+    
+    if not os.path.exists(fits_folder):
+        os.makedirs(fits_folder)
+    if arrays_folder and not os.path.exists(arrays_folder):
+        os.makedirs(arrays_folder)
+    
+    control.info("Insert splus.cloud credentials")
+    conn = splusdata.Core()
+    
+    control.info("Querying data")
+    df = conn.query(query, publicdata=True)
+    control.info(f"Data found. {len(df)} rows.")
+    df = df.to_pandas()
+
+    field = df['field'].unique()
+    ## IF more than one field is found, the query is wrong
+    if len(field) > 1:
+        control.critical(f"More than one field found. {field}")
+        return
+    
+    control.info(f"Field {field[0]} found.")
+    
+    
+
+def gen_dataset_cuts(
     query: str = """
             SELECT 
             TOP 2000
@@ -39,7 +83,8 @@ def gen_dataset(
     conn = splusdata.Core()
     
     control.info("Querying data")
-    df = conn.query(query)
+    df = conn.query(query, publicdata=True)
+    control.info(f"Data found. {len(df)} rows.")
     df = df.to_pandas()
 
     try:
@@ -79,4 +124,4 @@ def gen_dataset(
     
 
 if __name__ == "__main__":
-    gen_dataset()
+    gen_dataset_cuts()
