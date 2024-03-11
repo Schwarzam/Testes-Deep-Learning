@@ -90,22 +90,23 @@ def gen_dataset_cuts(
     try:
         ## Usually the ID is a byte array
         df['ID'] = df['ID'].apply(lambda x: x.decode('utf-8'))
+        df['Field'] = df['Field'].apply(lambda x: x.decode('utf-8'))
     except:
         pass
 
     df.to_csv('data.csv', index=False)
         
-    def threadable_splus_stamp(ra, dec, size, band, filename = None, array_file = None):
+    def threadable_splus_stamp(ra, dec, size, band, field, filename = None, array_file = None):
         if filename is not None:
             if os.path.exists(filename):
                 control.debug(f"Stamp for {ra} {dec} already exists.")
                 stamp = fits.open(filename)
             else:
-                stamp = conn.stamp(ra, dec, size, band)
+                stamp = conn.stamp(ra, dec, size, band, option=field)
                 stamp.writeto(filename, overwrite=True)
                 control.debug(f"Stamp for {ra} {dec} downloaded.")
         else:
-            stamp = conn.stamp(ra, dec, size, band)
+            stamp = conn.stamp(ra, dec, size, band, option=field)
             control.debug(f"Stamp for {ra} {dec} downloaded.")
         if array_file:
             if os.path.exists(array_file):
@@ -117,11 +118,23 @@ def gen_dataset_cuts(
     for key, value in df.iterrows():
         fits_filename = os.path.join(fits_folder, f"{value['ID']}.fits.fz")
         array_file = os.path.join(arrays_folder, f"{value['ID']}.npy") if arrays_folder else None
-        control.submit(threadable_splus_stamp, value["RA"], value["DEC"], 250, "R", fits_filename, array_file)
+        control.submit(threadable_splus_stamp, value["RA"], value["DEC"], 250, "R", value["Field"], fits_filename, array_file)
     control.wait()
     
-    control.info("Finished generating dataset.")
+    def clear_dataset(df):
+        ## for file in dataset: if file not in fits_folder, remove from dataset
+        control.info("Cleaning dataset")
+        for key, value in df.iterrows():
+            fits_filename = os.path.join(fits_folder, f"{value['ID']}.fits.fz")
+            if not os.path.exists(fits_filename):
+                control.debug(f"File {fits_filename} not found. Removing from dataset.")
+                df.drop(key, inplace=True)
+        
+        return df
     
+    clear_dataset(df).to_csv('data.csv', index=False)
+    
+    control.info("Finished generating dataset.")
 
 if __name__ == "__main__":
     gen_dataset_cuts()
